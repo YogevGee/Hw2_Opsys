@@ -1,0 +1,4 @@
+TIME 0: read cmd line: worker increment 0
+TIME 0: read cmd line: worker increment 0
+TIME 0: read cmd line: worker decrement 0
+TIME 0: read cmd line: dispatcher wait

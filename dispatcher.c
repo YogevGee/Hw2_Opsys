@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <ctype.h>
+#include <stdlib.h>
 
 /* strip newline and trim whitespaces*/
 static void strip_newline(char *s)

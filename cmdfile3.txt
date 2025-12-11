@@ -1,0 +1,4 @@
+worker increment 0
+worker increment 0
+worker decrement 0
+dispatcher wait
