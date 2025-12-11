@@ -97,7 +97,7 @@ static int handle_worker_command(char *line, long long dispatch_time_ms)
 
 
 
-int run_dispatcher(const char *cmdfile_path)
+int dispatcher_run(const char *cmdfile_path)
 {
      FILE *cmdf = fopen(cmdfile_path, "r");
     if (!cmdf) {
@@ -142,7 +142,7 @@ int run_dispatcher(const char *cmdfile_path)
         char parse_buf[MAX_LINE_LEN];
         strncpy(parse_buf, line_buf, sizeof(parse_buf));
         parse_buf[sizeof(parse_buf) - 1] = '\0';
-        trim_whitespace(parse_buf);
+        trim_whitespaces(parse_buf);
 
         if (parse_buf[0] == '\0') {
             /* Line was only spaces; nothing to do */
