@@ -267,6 +267,7 @@ static void *worker_thread_main(void *arg)
     return NULL;
 }
 
+
 static void execute_job_commands(const job_node_t *job, FILE *logf, int thread_index)
 {
     (void)logf;        /* כרגע לא משתמשים בלוג ברמת פקודה */
