@@ -1,0 +1,2 @@
+worker 1 increment 0; increment 1; decrement 1; increment 1
+dispatcher wait

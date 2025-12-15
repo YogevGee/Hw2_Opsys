@@ -1,0 +1,6 @@
+worker 1 msleep 100; increment 0
+dispatcher wait
+worker 2 msleep 100; increment 0
+dispatcher wait
+worker 3 increment 0
+dispatcher wait
