@@ -93,10 +93,6 @@ int worker_pool_init(int num_threads)
 
 int worker_pool_submit(const char *line, long long dispatch_time_ms)
 {
-     // סטאב ישן – אפשר למחוק, אני רק משאיר כהערה:
-    // (void)line;
-    // (void)dispatch_time_ms;
-    // return 0;
 
     if (shutdown_flag) {
         fprintf(stderr, "worker_pool_submit: called after shutdown\n");
@@ -116,16 +112,6 @@ int worker_pool_submit(const char *line, long long dispatch_time_ms)
         fprintf(stderr, "worker_pool_submit: malloc failed\n");
         return -1;
     }
-
-    node->job_id = job_id;
-    node->line   = strdup(line);   /* צריך #include <string.h> למעלה */
-    node->next   = NULL;
-
-    if (!node->line) {
-        fprintf(stderr, "worker_pool_submit: strdup failed\n");
-        free(node);
-        return -1;
-        }
 
     node->job_id = job_id;
     node->line   = strdup(line);   /* צריך #include <string.h> למעלה */
@@ -201,8 +187,6 @@ void worker_pool_shutdown(void)
     q_head = q_tail = NULL;
     pthread_mutex_unlock(&q_mutex);
 }
-
-static void execute_job_commands(const job_node_t *job, FILE *logf, int thread_index);
 
 static void *worker_thread_main(void *arg)
 {
@@ -285,8 +269,125 @@ static void *worker_thread_main(void *arg)
 
 static void execute_job_commands(const job_node_t *job, FILE *logf, int thread_index)
 {
-    (void)job;
+    (void)logf;        /* כרגע לא משתמשים בלוג ברמת פקודה */
+    (void)thread_index;
+
+    char buf[MAX_LINE_LEN + 1];
+    strncpy(buf, job->line, MAX_LINE_LEN);
+    buf[MAX_LINE_LEN] = '\0';
+
+    char *p = buf;
+
+    while (isspace((unsigned char)*p)) p++;
+
+    /* מדלגים על המילה "worker" ואם יש – גם על מספר job פנימי */
+    if (strncmp(p, "worker", 6) == 0 && isspace((unsigned char)p[6])) {
+        p += 6;
+        while (isspace((unsigned char)*p)) p++;
+        if (isdigit((unsigned char)*p)) {
+            char *endptr;
+            (void)strtol(p, &endptr, 10);
+            p = endptr;
+            while (isspace((unsigned char)*p)) p++;
+        }
+    }
+
+    execute_command_list(p, logf, thread_index);
+}
+
+/* מפצלת לרשימת פקודות לפי ';' ומריצה כל אחת בנפרד */
+static void execute_command_list(char *commands, FILE *logf, int thread_index)
+{
+    char *saveptr = NULL;
+
+    for (char *token = strtok_r(commands, ";", &saveptr);
+         token != NULL;
+         token = strtok_r(NULL, ";", &saveptr)) {
+
+        char *cmd = token;
+
+        while (isspace((unsigned char)*cmd)) cmd++;
+        char *end = cmd + strlen(cmd);
+        while (end > cmd && isspace((unsigned char)end[-1])) {
+            end--;
+        }
+        *end = '\0';
+
+        if (*cmd == '\0')
+            continue;
+
+        execute_single_command(cmd, logf, thread_index);
+    }
+}
+
+/* מריצה פקודה אחת:
+   msleep X
+   increment I
+   decrement I
+   repeat N <single-command>  (מריץ את הפקודה שאחרי N N פעמים)
+*/
+static void execute_single_command(char *cmd, FILE *logf, int thread_index)
+{
     (void)logf;
     (void)thread_index;
-    /* בינתיים לא עושים כלום – רק כדי שהקוד יתקמפל. */
+
+    /* msleep X */
+    if (strncmp(cmd, "msleep", 6) == 0) {
+        long long ms;
+        if (sscanf(cmd + 6, "%lld", &ms) == 1 && ms >= 0) {
+            msleep_ms(ms);
+        }
+        return;
+    }
+
+    /* increment I */
+    if (strncmp(cmd, "increment", 9) == 0) {
+        int idx;
+        if (sscanf(cmd + 9, "%d", &idx) == 1) {
+            increment_counter(idx);
+        }
+        return;
+    }
+
+    /* decrement I */
+    if (strncmp(cmd, "decrement", 9) == 0) {
+        int idx;
+        if (sscanf(cmd + 9, "%d", &idx) == 1) {
+            decrement_counter(idx);
+        }
+        return;
+    }
+
+    /* repeat N <single-command> */
+    if (strncmp(cmd, "repeat", 6) == 0) {
+        long times;
+        char *p = cmd + 6;
+        while (isspace((unsigned char)*p)) p++;
+
+        if (*p == '\0')
+            return;
+
+        char *endptr;
+        times = strtol(p, &endptr, 10);
+        if (times <= 0)
+            return;
+
+        p = endptr;
+        while (isspace((unsigned char)*p)) p++;
+        if (*p == '\0')
+            return;
+
+        /* הפקודה החוזרת (למשל "msleep 10" או "increment 3") */
+        char inner_buf[MAX_LINE_LEN + 1];
+        strncpy(inner_buf, p, MAX_LINE_LEN);
+        inner_buf[MAX_LINE_LEN] = '\0';
+
+        for (long i = 0; i < times; i++) {
+            execute_single_command(inner_buf, logf, thread_index);
+        }
+        return;
+    }
+
+    /* פקודה לא מוכרת – מדפיסים ל-stderr כדי לעזור בדיבאג */
+    fprintf(stderr, "worker: unknown command: '%s'\n", cmd);
 }
