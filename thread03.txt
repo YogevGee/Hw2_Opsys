@@ -1,2 +1,2 @@
-TIME 2: START job worker decrement 1
-TIME 3: END job worker decrement 1
+TIME 1: START job worker increment 0; repeat 10; increment 0
+TIME 12: END job worker increment 0; repeat 10; increment 0

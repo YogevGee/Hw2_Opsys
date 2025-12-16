@@ -166,7 +166,7 @@ int dispatcher_run(const char *cmdfile_path)
         else if (strcmp(first, "worker") == 0) {
             /* Pass the FULL original line (without newline, but with original spacing)
                to the worker pool. The job's dispatch time is now_ms. */
-            if (handle_worker_command(line_buf, now_ms) != 0) {
+            if (handle_worker_command(line_buf, elapsed_ms) != 0) {
                 /* Again, error printed; we continue. */
             }
         }
