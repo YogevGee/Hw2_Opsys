@@ -1,2 +1,0 @@
-worker 1 repeat 5 increment 0
-dispatcher wait

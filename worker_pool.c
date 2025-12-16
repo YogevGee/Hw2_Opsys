@@ -300,33 +300,90 @@ static void execute_job_commands(const job_node_t *job, FILE *logf, int thread_i
 /* מפצלת לרשימת פקודות לפי ';' ומריצה כל אחת בנפרד */
 static void execute_command_list(char *commands, FILE *logf, int thread_index)
 {
+    char *cmd_array[128];   // enough for most reasonable lines
+    int   cmd_count = 0;
+
     char *saveptr = NULL;
 
+    /* First pass: split into trimmed commands, store pointers in cmd_array */
     for (char *token = strtok_r(commands, ";", &saveptr);
-         token != NULL;
+         token != NULL && cmd_count < 128;
          token = strtok_r(NULL, ";", &saveptr)) {
 
         char *cmd = token;
 
+        /* Trim leading whitespace */
         while (isspace((unsigned char)*cmd)) cmd++;
+
+        /* Trim trailing whitespace */
         char *end = cmd + strlen(cmd);
         while (end > cmd && isspace((unsigned char)end[-1])) {
             end--;
         }
         *end = '\0';
 
-        if (*cmd == '\0')
-            continue;
+        if (*cmd == '\0') {
+            continue;  // empty chunk, skip
+        }
 
-        execute_single_command(cmd, logf, thread_index);
+        cmd_array[cmd_count++] = cmd;
+    }
+
+    /* Second pass: execute with "repeat N; suffix" semantics.
+       repeat N; cmdX; cmdY; ...  => run {cmdX..cmdY} N times and stop. */
+    int i = 0;
+    while (i < cmd_count) {
+        char *cmd = cmd_array[i];
+
+        /* Check for "repeat" as a standalone keyword followed by a number */
+        if (strncmp(cmd, "repeat", 6) == 0 &&
+            (cmd[6] == '\0' || isspace((unsigned char)cmd[6]))) {
+
+            char *p = cmd + 6;
+            while (isspace((unsigned char)*p)) p++;
+
+            if (*p == '\0') {
+                // "repeat" with no number – ignore the rest of the line
+                return;
+            }
+
+            char *endptr;
+            long times = strtol(p, &endptr, 10);
+            if (times <= 0) {
+                // non-positive repeat – do nothing more
+                return;
+            }
+
+            /* After the number, only whitespace is allowed on this token */
+            while (isspace((unsigned char)*endptr)) endptr++;
+            if (*endptr != '\0') {
+                // Something extra after the number on the same token – malformed
+                fprintf(stderr, "worker: malformed repeat: '%s'\n", cmd);
+                return;
+            }
+
+            /* Suffix commands are all commands after "repeat" on this line */
+            for (long t = 0; t < times; t++) {
+                for (int j = i + 1; j < cmd_count; j++) {
+                    execute_single_command(cmd_array[j], logf, thread_index);
+                }
+            }
+
+            /* After a repeat, spec says: repeat to END OF LINE, then stop. */
+            break;
+        } else {
+            /* Normal command, just execute once and move on */
+            execute_single_command(cmd, logf, thread_index);
+            i++;
+        }
     }
 }
 
-/* מריצה פקודה אחת:
-   msleep X
-   increment I
-   decrement I
-   repeat N <single-command>  (מריץ את הפקודה שאחרי N N פעמים)
+/* Run a single basic command:
+     msleep X
+     increment I
+     decrement I
+   (repeat is handled at the list level in execute_command_list)
 */
 static void execute_single_command(char *cmd, FILE *logf, int thread_index)
 {
@@ -334,7 +391,9 @@ static void execute_single_command(char *cmd, FILE *logf, int thread_index)
     (void)thread_index;
 
     /* msleep X */
-    if (strncmp(cmd, "msleep", 6) == 0) {
+    if (strncmp(cmd, "msleep", 6) == 0 &&
+        (cmd[6] == '\0' || isspace((unsigned char)cmd[6]))) {
+
         long long ms;
         if (sscanf(cmd + 6, "%lld", &ms) == 1 && ms >= 0) {
             msleep_ms(ms);
@@ -343,7 +402,9 @@ static void execute_single_command(char *cmd, FILE *logf, int thread_index)
     }
 
     /* increment I */
-    if (strncmp(cmd, "increment", 9) == 0) {
+    if (strncmp(cmd, "increment", 9) == 0 &&
+        (cmd[9] == '\0' || isspace((unsigned char)cmd[9]))) {
+
         int idx;
         if (sscanf(cmd + 9, "%d", &idx) == 1) {
             increment_counter(idx);
@@ -352,7 +413,9 @@ static void execute_single_command(char *cmd, FILE *logf, int thread_index)
     }
 
     /* decrement I */
-    if (strncmp(cmd, "decrement", 9) == 0) {
+    if (strncmp(cmd, "decrement", 9) == 0 &&
+        (cmd[9] == '\0' || isspace((unsigned char)cmd[9]))) {
+
         int idx;
         if (sscanf(cmd + 9, "%d", &idx) == 1) {
             decrement_counter(idx);
@@ -360,36 +423,6 @@ static void execute_single_command(char *cmd, FILE *logf, int thread_index)
         return;
     }
 
-    /* repeat N <single-command> */
-    if (strncmp(cmd, "repeat", 6) == 0) {
-        long times;
-        char *p = cmd + 6;
-        while (isspace((unsigned char)*p)) p++;
-
-        if (*p == '\0')
-            return;
-
-        char *endptr;
-        times = strtol(p, &endptr, 10);
-        if (times <= 0)
-            return;
-
-        p = endptr;
-        while (isspace((unsigned char)*p)) p++;
-        if (*p == '\0')
-            return;
-
-        /* הפקודה החוזרת (למשל "msleep 10" או "increment 3") */
-        char inner_buf[MAX_LINE_LEN + 1];
-        strncpy(inner_buf, p, MAX_LINE_LEN);
-        inner_buf[MAX_LINE_LEN] = '\0';
-
-        for (long i = 0; i < times; i++) {
-            execute_single_command(inner_buf, logf, thread_index);
-        }
-        return;
-    }
-
-    /* פקודה לא מוכרת – מדפיסים ל-stderr כדי לעזור בדיבאג */
+    /* Unknown command – helpful for debugging */
     fprintf(stderr, "worker: unknown command: '%s'\n", cmd);
 }
