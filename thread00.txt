@@ -1,2 +1,8 @@
-TIME 1: START job worker msleep 100
-TIME 198: END job worker msleep 100
+TIME 56: START job worker increment 0; increment 1
+TIME 57: END job worker increment 0; increment 1
+TIME 57: START job worker repeat 3; increment 0
+TIME 59: END job worker repeat 3; increment 0
+TIME 59: START job worker msleep 50
+TIME 123: END job worker msleep 50
+TIME 123: START job worker increment 2; msleep 20
+TIME 154: END job worker increment 2; msleep 20
