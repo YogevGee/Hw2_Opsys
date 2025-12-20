@@ -30,38 +30,30 @@ static void trim_whitespaces(char *s)
     }
 }
 
-/* Internal handlers for dispatcher command and workers job */
 static int handle_dispatcher_command(char *line)
 {
-    /* line starts with "dispatcher" (already trimmed) */
+    /* line starts with "dispatcher_msleep" or "dispatcher_wait" (already trimmed) */
     char buf[MAX_LINE_LEN];
     strncpy(buf, line, sizeof(buf));
     buf[sizeof(buf) - 1] = '\0';
 
-    /* Tokenize: dispatcher <subcommand> [arg] */
-    char *token = strtok(buf, " \t");
-    if (!token) {
+    /* Tokenize: dispatcher_msleep [arg]   OR   dispatcher_wait */
+    char *cmd = strtok(buf, " \t");
+    if (!cmd) {
         return 0; /* empty / weird line, ignore */
     }
 
-    /* token == "dispatcher" */
-    char *subcmd = strtok(NULL, " \t");
-    if (!subcmd) {
-        fprintf(stderr, "dispatcher: missing subcommand in line: %s\n", line);
-        return -1;
-    }
-
-    if (strcmp(subcmd, "msleep") == 0) {
+    if (strcmp(cmd, "dispatcher_msleep") == 0) {
         char *arg = strtok(NULL, " \t");
         if (!arg) {
-            fprintf(stderr, "dispatcher msleep: missing argument in line: %s\n", line);
+            fprintf(stderr, "dispatcher_msleep: missing argument in line: %s\n", line);
             return -1;
         }
 
         char *endptr = NULL;
         long val = strtol(arg, &endptr, 10);
         if (endptr == arg || *endptr != '\0' || val < 0) {
-            fprintf(stderr, "dispatcher msleep: invalid value '%s' in line: %s\n", arg, line);
+            fprintf(stderr, "dispatcher_msleep: invalid value '%s' in line: %s\n", arg, line);
             return -1;
         }
 
@@ -69,13 +61,13 @@ static int handle_dispatcher_command(char *line)
         msleep_ms((long long)val);
         return 0;
     }
-    else if (strcmp(subcmd, "wait") == 0) {
+    else if (strcmp(cmd, "dispatcher_wait") == 0) {
         /* Wait for all pending worker jobs */
         worker_pool_wait_all();
         return 0;
     }
     else {
-        fprintf(stderr, "dispatcher: unknown subcommand '%s' in line: %s\n", subcmd, line);
+        fprintf(stderr, "dispatcher: unknown command '%s' in line: %s\n", cmd, line);
         return -1;
     }
 }
@@ -150,30 +142,29 @@ int dispatcher_run(const char *cmdfile_path)
             continue;
         }
 
-        /* Find first token: "dispatcher" or "worker" or something else */
+        /* Find first token: "dispatcher_msleep", "dispatcher_wait", "worker", or something else */
         char *first = strtok(parse_buf, " \t");
         if (!first) {
             continue;
         }
 
-        if (strcmp(first, "dispatcher") == 0) {
-            /* Handle dispatcher msleep/wait (serially in main thread) */
+        if (strcmp(first, "dispatcher_msleep") == 0 ||
+            strcmp(first, "dispatcher_wait")  == 0) {
+            /* Handle dispatcher_msleep / dispatcher_wait (serially in main thread) */
             if (handle_dispatcher_command(line_buf) != 0) {
-                /* We log errors to stderr but continue processing other lines */
-                /* If you prefer, you can decide to return -1 here. */
+                /* error already printed, keep going */
             }
         }
         else if (strcmp(first, "worker") == 0) {
-            /* Pass the FULL original line (without newline, but with original spacing)
-               to the worker pool. The job's dispatch time is now_ms. */
+            /* Pass the full original line to the worker pool */
             if (handle_worker_command(line_buf, elapsed_ms) != 0) {
-                /* Again, error printed; we continue. */
+                /* error already printed */
             }
         }
         else {
-            /* Unknown command line – not dispatcher/worker; ignore or warn */
             fprintf(stderr, "Unknown command (ignored): %s\n", line_buf);
         }
+
     }
 
     if (logf) {

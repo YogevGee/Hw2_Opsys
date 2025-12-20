@@ -1,6 +1,13 @@
-dispatcher msleep 10
-worker increment 0; increment 1
-worker repeat 3; increment 0
-worker msleep 50
-worker increment 2; msleep 20
-dispatcher wait
+dispatcher_msleep 50
+
+worker msleep 100; increment 0; increment 0; increment 0
+worker msleep 50; increment 0; msleep 50; increment 1
+worker repeat 3; increment 0; increment 1; decrement 2
+
+dispatcher_wait
+
+worker increment 2; decrement 2; increment 1; msleep 10
+   worker    msleep 5;   increment 0;   decrement 1   
+
+dispatcher_wait
+
